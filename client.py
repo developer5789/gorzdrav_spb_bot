@@ -1,6 +1,5 @@
 import requests
 from pprint import pprint
-
 BASE_URL = 'https://gorzdrav.spb.ru/_api/api/v2/'
 headers = {
     'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
@@ -28,26 +27,22 @@ URL_CHECK = BASE_URL + 'oms/attachment/check'
 class Patient:
     def __init__(self, patient_id, name=None, last_name=None,
                  middle_name=None, birthdate=None, polis=None, polis_series=''):
-        self.patient_id = patient_id
         self.api_client = ApiClient()
-        self.database_client = None
+        self.patient_id = patient_id
         self.name = name
         self.last_name = last_name
         self.middle_name = middle_name
-        self.birthdate = birthdate
         self.polis = polis
+        self.birthdate = birthdate
         self.polis_series = polis_series
 
     def check(self, polyc_id):
         res = self.api_client.check(self, polyc_id)
         return res
 
-    def get_available_polycs(self):
+    def get_patient_polycs(self):
         polycs = self.api_client.get_lst_polycs(self)
         return polycs['result']
-
-    def create_patient(self):
-        pass
 
 
 class ApiClient:
@@ -112,3 +107,5 @@ class ApiClient:
         resp = requests.post(URL_CHECK, json=data, headers=headers)
         result = resp.json()['result']
         return result
+
+

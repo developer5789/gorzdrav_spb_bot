@@ -5,20 +5,18 @@ CREATE_QUERY = """CREATE TABLE patient(
                     name TEXT,
                     last_name TEXT, 
                     middle_name TEXT,
-                    polis INTEGER,
+                    polis TEXT,
                     birthday_date TEXT,
-                    polis_series INTEGER NULL
+                    polis_series TEXT 
                     ) """
 
+CREATE_PATIENT = """ INSERT INTO patient 
+                     VALUES(?, ?, ?, ?, ?, ?, ?)
+"""
 
-CREATE_TABLE_APPOINTMENTS = """CREATE TABLE appointments(
-                                    appointment_id INTEGER,
-                                    patient_id INTEGER,
-                                    visit_datetime TEXT, 
-                                
-                                    birthday_date TEXT,
-                                    polis_series INTEGER NULL
-                                    ) """
+FIND_QUERY = """SELECT * FROM patient
+                 WHERE patient_id=%d
+"""
 
 
 class SQLiteClient:
@@ -52,15 +50,16 @@ class SQLiteClient:
 class DatabaseUser(SQLiteClient):
     def __init__(self, file_path: str):
         super().__init__(file_path)
-        self.create_conn()
 
-    def create_patient(self, command, params=tuple()):
-        self.execute_command(command, params)
+    def create_patient(self, patient):
+        attrs = tuple(value for key, value in patient.__dict__.items() if key != 'api_client')
+        self.execute_command(CREATE_PATIENT, params=attrs)
 
     def update_patient(self):
         pass
 
+    def find_patient(self, user_id: int):
+        command = FIND_QUERY % user_id
+        res = self.execute_select_command(command)
+        return res[0] if res else res
 
-db_client = SQLiteClient('patient.db')
-db_client.create_conn()
-db_client.execute_command(CREATE_QUERY)
