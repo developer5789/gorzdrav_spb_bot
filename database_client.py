@@ -1,5 +1,13 @@
 import sqlite3 as sq
 
+PATIENT_FIELDS = {'имя': 'name',
+                  'фамилия': 'last_name',
+                  'отчество': 'middle_name',
+                  'дата рождения': 'birthday_date',
+                  'номер полиса': 'polis',
+                  'серия полиса': 'polis_series'
+}
+
 CREATE_QUERY = """CREATE TABLE patient(
                     patient_id INTEGER,
                     name TEXT,
@@ -17,6 +25,16 @@ CREATE_PATIENT = """ INSERT INTO patient
 FIND_QUERY = """SELECT * FROM patient
                  WHERE patient_id=%d
 """
+
+
+UPDATE_QUERY = """
+                    UPDATE patient
+                    SET %s='%s'
+                    WHERE patient_id=%d
+"""
+
+DEL_PATIENT = """DELETE FROM patient
+                    WHERE patient_id=%d"""
 
 
 class SQLiteClient:
@@ -55,11 +73,18 @@ class DatabaseUser(SQLiteClient):
         attrs = tuple(value for key, value in patient.__dict__.items() if key != 'api_client')
         self.execute_command(CREATE_PATIENT, params=attrs)
 
-    def update_patient(self):
-        pass
+    def update_patient(self, user_id: int, field: str, new_value: str):
+        command = UPDATE_QUERY % (field, new_value, user_id)
+        self.execute_command(command)
 
     def find_patient(self, user_id: int):
         command = FIND_QUERY % user_id
         res = self.execute_select_command(command)
         return res[0] if res else res
+
+    def del_patient(self, user_id: int):
+        command = DEL_PATIENT % user_id
+        self.execute_command(command)
+
+
 
