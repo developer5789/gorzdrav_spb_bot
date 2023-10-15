@@ -48,6 +48,7 @@ def execute_command_if_exist(func):
         else:
             command = globals()[message.text.replace('/', '')]
             command(message)
+
     return wrapper
 
 
@@ -64,6 +65,7 @@ def get_patient_from_db(func):
         else:
             bot.send_message(message.chat.id, 'Для выполнения команды нужно пройти регистрацию!'
                                               'Воспользуйтесь командой /start для регистрации.')
+
     return wrapper
 
 
@@ -88,7 +90,7 @@ def show_my_profile(message, search_result):
                 Номер полиса : {search_result[4]}
                 {'Серия полиса: ' + str(search_result[6]) if search_result[6] else ''}
                 Для редактирования профиля используйте команду /edit_my_profile
-                """.replace(4*' ', '')
+                """.replace(4 * ' ', '')
     bot.send_message(message.chat.id, profile)
 
 
@@ -223,7 +225,7 @@ def get_doctors(call):
     keaboard = types.InlineKeyboardMarkup()
     for doctor in doctors:
         name, count_free_tickets, = doctor['name'], doctor["freeTicketCount"]
-        callback_data = ';'.join(['doc', clinic_id,  doctor["id"]])
+        callback_data = ';'.join(['doc', clinic_id, doctor["id"]])
         button = types.InlineKeyboardButton(f"{name} Талонов: {count_free_tickets} ", callback_data=callback_data)
         keaboard.add(button)
     bot.send_message(call.message.chat.id, 'Выберите врача:', reply_markup=keaboard)
@@ -235,8 +237,8 @@ def get_appointments(call):
     appointments = bot.api_client.get_appointments(clinic_id, doctor_id)
     users_sessions[call.message.chat.id] = {
 
-                                'clinic_id': clinic_id,
-                                'appointments': appointments
+        'clinic_id': clinic_id,
+        'appointments': appointments
     }
     bot.send_message(call.message.chat.id, 'Выберите дату', reply_markup=calendar.create_calendar(
         name=calendar_1.prefix,
@@ -252,7 +254,7 @@ def show_appointments(chat_id, date):
         buttons = []
         appointments = list(filter(lambda a: a["visitStart"].startswith(date), appointments['result']))
         if not appointments:
-            bot.send_message(chat_id, 'Нет свободных талонов на выбранный день\U0001F61E')
+            bot.send_message(chat_id, 'Нет свободных талонов на выбранный день \U0001F61E')
             return
         for appointment in appointments:
             time = appointment['visitStart'].split('T')[1][:5]
@@ -288,15 +290,13 @@ def callback_make_appointment_or_not(call):
             res = bot.api_client.make_appointment(patient_id, patient_inf, clinic_id, appointment_id)
             if res:
                 del users_sessions[call.message.chat.id]
-                bot.send_message(call.message.chat.id, 'Вы успешно записаны!\nДля просмотра записей '
-                                                       'воспользуйтесь командой /show_appointments'
-                                                       )
+                bot.send_message(call.message.chat.id, 'Вы успешно записаны \u2705\nДля просмотра записей '
+                                                       'воспользуйтесь командой /see_appointments'
+                                 )
             else:
                 bot.send_message(call.message.chat.id, 'Упс!Что-то пошло не так. Попробуйте записаться ещё раз!')
         else:
             bot.send_message(call.message.chat.id, 'Упс!Что-то пошло не так.Проверьте корректность данных профиля.')
-    else:
-        print('Не хочу')
 
 
 # функция получает список специальностей по id клиники и выводит их в чат под видом кнопок
@@ -311,6 +311,7 @@ def show_specialities(message: types.Message, clinic: dict, search_result):
     bot.send_message(message.chat.id, 'Выберите специальность:', reply_markup=keaboard)
 
 
+
 @execute_command_if_exist
 def check_numb_clinic(message: types.Message, available_clinics, numb_clinics, next_step_func, search_result):
     numb = message.text.strip()
@@ -319,14 +320,97 @@ def check_numb_clinic(message: types.Message, available_clinics, numb_clinics, n
         next_step_func(message, selected_clinic, search_result)
     else:
         bot.send_message(message.chat.id, 'Введён неверный номер, попробуйте ещё раз:')
-        bot.register_next_step_handler(message, check_numb_clinic, available_clinics, numb_clinics)
+        bot.register_next_step_handler(message, check_numb_clinic, available_clinics, numb_clinics,
+                                       next_step_func, search_result)
 
 
-def show_made_appointments(message, selected_clinic, search_result):
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('cancelApp', 'dont_cancelApp')))
+def cancel_callback(call):
+    command, numb = call.data.split('|')
+    if command == 'cancelApp':
+        appointment = users_sessions[call.message.chat.id]['appointments'][int(numb)-1]
+        res = bot.api_client.cancel_appointment(appointment)
+        if res:
+            bot.send_message(call.message.chat.id, 'Запись к врачу удалена!')
+        else:
+            bot.send_message(call.message.chat.id, 'Не получилось удалить запись.Попробуйте еще раз')
+    bot.delete_message(call.message.chat.id, call.message.message_id)
+
+
+def download_ticket(user_id, numb):
+    patient_inf = bot.db_user.find_patient(user_id)
+    appointment = users_sessions[user_id]['appointments'][numb-1]
+    res = bot.api_client.download_ticket(appointment, patient_inf)
+    file_name = appointment["appointmentId"].replace(';', '_')
+    with open(fr'documents/{user_id}.pdf', 'wb') as f:
+        f.write(res)
+    with open(fr'documents/{user_id}.pdf', 'rb') as f:
+        bot.send_document(user_id, f)
+
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith(('cancel_', 'next_', 'previous_', 'download_')))
+def appointment_callback(call):
+    command, numb = call.data.split('_')
+    appointments = users_sessions[call.message.chat.id]['appointments']
+    max_amount = len(appointments)
+    if command == 'cancel':
+        keyboard_cancel = types.InlineKeyboardMarkup()
+        yes_button = types.InlineKeyboardButton('Да', callback_data=f'cancelApp|{numb}')
+        no_button = types.InlineKeyboardButton('Нет', callback_data=f'dont_cancelApp|{numb}')
+        keyboard_cancel.add(yes_button, no_button)
+        bot.send_message(call.message.chat.id, 'Хотите отменить запись??', reply_markup=keyboard_cancel )
+    elif command == 'next' and int(numb) + 1 <= max_amount:
+        text, keyboard = create_message_appointment(appointments, int(numb) + 1)
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                              reply_markup=keyboard, parse_mode='html')
+    elif command == 'previous' and int(numb) - 1 >= 1:
+        text, keyboard = create_message_appointment(appointments, int(numb) - 1)
+        bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
+                              reply_markup=keyboard, parse_mode='html')
+    elif command == 'download':
+        download_ticket(call.message.chat.id, int(numb))
+
+
+def create_message_appointment(appointments, numb=1):
+    appointment = appointments[numb-1]
+    keyboard = types.InlineKeyboardMarkup()
+    next_button = types.InlineKeyboardButton('\u27A1', callback_data=f'next_{numb}')
+    previous_button = types.InlineKeyboardButton('\u2B05', callback_data=f'previous_{numb}')
+    cancel_button = types.InlineKeyboardButton('Отменить запись \u274C', callback_data=f'cancel_{numb}')
+    download_ticket = types.InlineKeyboardButton('Скачать талон \U0001F4BE ', callback_data=f'download_{numb}')
+    keyboard.add(cancel_button)
+    keyboard.add(download_ticket)
+    keyboard.add(previous_button, next_button)
+    visit_start = appointment['visitStart'].split('T')
+    date_visit = visit_start[0]
+    time_visit = visit_start[1][:5]
+    text = f"""
+<i>Дата: {date_visit}</i>\n
+<i>Время: {time_visit}</i>\n
+<i>Специализация: </i><b>{appointment['specialityRendingConsultation']['name']}</b>\n
+<i>Врач: {appointment['doctorRendingConsultation']['name']}</i>\n
+<i>{appointment['lpuFullName']}</i>\n
+<i>{appointment['lpuAddress']}</i>\n
+<i>Телефон: </i><code>{'+7' + appointment['lpuPhone']}</code>\n
+                        Запись <b>{numb}</b> из <b>{len(appointments)}</b>
+"""
+    return text, keyboard
+
+
+def show_made_appointments(message, appointments):
+    if appointments:
+        users_sessions[message.chat.id] = {'appointments': appointments}
+        text, keyboard = create_message_appointment(appointments)
+        bot.send_message(message.chat.id, text, reply_markup=keyboard, parse_mode='html')
+    else:
+        bot.send_message(message.chat.id, 'У вас нет записей в выбранном мед.учреждении.')
+
+
+def get_made_appointments(message, selected_clinic, search_result):
     patient_id = bot.api_client.search_patient(selected_clinic['id'], search_result)
     if patient_id:
         made_appointments = bot.api_client.get_made_appointments(patient_id, selected_clinic['id'])
-        pprint(made_appointments)
+        show_made_appointments(message, made_appointments)
     else:
         bot.send_message(message.chat.id, 'Упс!Что-то пошло не так.Проверьте корректность данных профиля.')
 
@@ -334,7 +418,7 @@ def show_made_appointments(message, selected_clinic, search_result):
 @bot.message_handler(commands=['see_appointments'])
 @get_patient_from_db
 def see_appointments(message, search_result):
-    select_clinic(message, search_result, show_made_appointments)
+    select_clinic(message, search_result, get_made_appointments)
 
 
 @bot.message_handler(commands=['make_appointment'])
@@ -364,7 +448,7 @@ def del_my_profile(message, *args):
     yes_button = types.InlineKeyboardButton('Да', callback_data='del_profile')
     no_button = types.InlineKeyboardButton('Нет', callback_data='dont_del_profile')
     keyboard.add(yes_button, no_button)
-    bot.send_message(message.chat.id, text='Вы уверены?', reply_markup=keyboard)
+    bot.send_message(message.chat.id, text='Хотите удалить ваш профиль?', reply_markup=keyboard)
 
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('calendar_1'))
@@ -393,5 +477,3 @@ while True:
         bot.polling()
     except Exception as err:
         raise err
-
-

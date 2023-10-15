@@ -27,6 +27,8 @@ URL_CHECK = BASE_URL + 'oms/attachment/check'
 URL_CREATE = BASE_URL + 'appointment/create'
 URL_MADE_APPOINTMENTS = BASE_URL + 'appointments'
 URL_SEARCH = BASE_URL + 'patient/search'
+URL_CANCEL = BASE_URL + 'appointment/cancel'
+
 
 class Patient:
     def __init__(self, patient_id, name=None, last_name=None,
@@ -59,7 +61,6 @@ class ApiClient:
 
     @staticmethod
     def post(url, json):
-        pprint(json)
         resp = requests.post(url, json=json, headers=headers)
         result = resp.json()['success']
         return result
@@ -154,3 +155,35 @@ class ApiClient:
         }
         res = self.get(URL_MADE_APPOINTMENTS, params)
         return res['result']
+
+    def cancel_appointment(self, appointment):
+        data = {
+            "appointmentId": appointment['appointmentId'],
+            "lpuId": appointment["lpuId"],
+            "patientId": appointment['patientId'],
+            "esiaId": None
+        }
+        res = self.post(URL_CANCEL, data)
+        return res
+
+    def download_ticket(self, appointment, patient_inf):
+        data = {
+            'lpuId': appointment['lpuId'],
+            'specialityName': appointment['specialityRendingConsultation']['name'],
+            'doctorName': appointment['doctorRendingConsultation']['name'],
+            'doctorAria': '',
+            'lastName': patient_inf[2],
+            'firstName': patient_inf[1],
+            'middleName': patient_inf[3],
+            'birthDate': '-'.join(patient_inf[5].split('.')[::-1]) + 'T00:00:00',
+            'appointmentId': appointment['appointmentId'],
+            'visitStart': appointment['visitStart'],
+            'num': '',
+            'address': appointment['lpuAddress'],
+            'downloadFile': True
+        }
+        res = requests.post('https://gorzdrav.spb.ru/_document/document/freeschedule', data=data, headers=headers)
+        return res.content
+
+# client = ApiClient()
+# client.download_ticket()
